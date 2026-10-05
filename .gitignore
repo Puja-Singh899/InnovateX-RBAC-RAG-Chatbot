@@ -1,0 +1,30 @@
+# Environment variables / secrets
+.env
+*.pem
+*.key
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+venv/
+.venv/
+
+# Local database
+history.db
+
+# ChromaDB
+vectorstore_backup/
+vectorstore/
+
+# Uploaded documents
+data/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
