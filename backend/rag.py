@@ -9,7 +9,18 @@ load_dotenv()
 
 
 # Load models
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+embedding_model = None
+
+
+def get_embedding_model():
+    global embedding_model
+
+    if embedding_model is None:
+        embedding_model = SentenceTransformer(
+            "all-MiniLM-L6-v2"
+        )
+
+    return embedding_model
 
 gemini_client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
@@ -40,22 +51,15 @@ ROLE_PERMISSIONS = {
 def generate_rag_response(question: str, user_role: str):
     allowed_departments = ROLE_PERMISSIONS[user_role]
 
-    print("USER ROLE:", user_role)
-    print("ALLOWED DEPARTMENTS:", allowed_departments)
-
-    question_embedding = embedding_model.encode(question).tolist()
+    question_embedding = get_embedding_model().encode(
+        question
+    ).tolist()
 
     results = collection.query(
         query_embeddings=[question_embedding],
         n_results=2,
         where={"department": {"$in": allowed_departments}}
     )
-
-    print("RETRIEVED METADATA:", results["metadatas"][0])
-    print("RETRIEVED SOURCES:", [
-        metadata["source"]
-        for metadata in results["metadatas"][0]
-    ])
 
     # Combine retrieved chunks
     context = "\n\n".join(
@@ -89,21 +93,8 @@ Question:
 {question}
 """
 
-        # Generate answer
+    # Generate answer
     interaction = gemini_client.interactions.create(
         model="gemini-3.6-flash",
         input=prompt
     )
-
-
-
-
-    answer = interaction.output_text.strip()
-
-    if "do not have enough information" in answer.lower():
-        sources = []
-
-    return {
-        "answer": answer,
-        "sources": list(sources)
-    }
