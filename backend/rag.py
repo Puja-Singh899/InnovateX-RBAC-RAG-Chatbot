@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-# Load models
+# Load embedding model lazily
 embedding_model = None
 
 
@@ -22,19 +22,31 @@ def get_embedding_model():
 
     return embedding_model
 
+
+# Gemini client
 gemini_client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
 
 
-# Connect to Chroma
-chroma_client = chromadb.PersistentClient(
-    path="vectorstore"
-)
+# Connect to Chroma lazily
+chroma_client = None
+collection = None
 
-collection = chroma_client.get_collection(
-    name="company_documents"
-)
+
+def get_collection():
+    global chroma_client, collection
+
+    if collection is None:
+        chroma_client = chromadb.PersistentClient(
+            path="vectorstore"
+        )
+
+        collection = chroma_client.get_collection(
+            name="company_documents"
+        )
+
+    return collection
 
 
 # RBAC permissions
@@ -43,22 +55,35 @@ ROLE_PERMISSIONS = {
     "marketing": ["marketing", "general"],
     "hr": ["hr", "general"],
     "engineering": ["engineering", "general"],
-    "executive": ["finance", "marketing", "hr", "engineering", "general"],
+    "executive": [
+        "finance",
+        "marketing",
+        "hr",
+        "engineering",
+        "general"
+    ],
     "employee": ["general"],
 }
 
 
 def generate_rag_response(question: str, user_role: str):
+
     allowed_departments = ROLE_PERMISSIONS[user_role]
 
+    # Generate question embedding
     question_embedding = get_embedding_model().encode(
         question
     ).tolist()
 
-    results = collection.query(
+    # Retrieve documents using RBAC permissions
+    results = get_collection().query(
         query_embeddings=[question_embedding],
         n_results=2,
-        where={"department": {"$in": allowed_departments}}
+        where={
+            "department": {
+                "$in": allowed_departments
+            }
+        }
     )
 
     # Combine retrieved chunks
@@ -94,7 +119,19 @@ Question:
 """
 
     # Generate answer
+
+    # Generate answer
     interaction = gemini_client.interactions.create(
-        model="gemini-3.6-flash",
+        model="gemini-3.1-flash-lite",
         input=prompt
     )
+
+    answer = interaction.output_text.strip()
+
+    if "do not have enough information" in answer.lower():
+        sources = []
+
+    return {
+        "answer": answer,
+        "sources": list(sources)
+    }
