@@ -1,3 +1,4 @@
+
 from pathlib import Path
 import uuid
 
@@ -7,18 +8,42 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
 
 
-embedding_model = SentenceTransformer(
-    "all-MiniLM-L6-v2"
-)
+# Load the embedding model only when needed
+embedding_model = None
 
-chroma_client = chromadb.PersistentClient(
-    path="vectorstore"
-)
 
-collection = chroma_client.get_or_create_collection(
-    name="company_documents"
-)
+def get_embedding_model():
+    global embedding_model
 
+    if embedding_model is None:
+        embedding_model = SentenceTransformer(
+            "all-MiniLM-L6-v2"
+        )
+
+    return embedding_model
+
+
+# Connect to ChromaDB only when needed
+chroma_client = None
+collection = None
+
+
+def get_collection():
+    global chroma_client, collection
+
+    if collection is None:
+        chroma_client = chromadb.PersistentClient(
+            path="vectorstore"
+        )
+
+        collection = chroma_client.get_or_create_collection(
+            name="company_documents"
+        )
+
+    return collection
+
+
+# Keep the existing chunking configuration
 text_splitter = RecursiveCharacterTextSplitter(
     chunk_size=300,
     chunk_overlap=50
@@ -48,7 +73,6 @@ def index_document(
 
     # Read TXT or PDF
     if file_path.suffix.lower() == ".txt":
-
         with open(
             file_path,
             "r",
@@ -57,7 +81,6 @@ def index_document(
             text = file.read()
 
     elif file_path.suffix.lower() == ".pdf":
-
         text = extract_text_from_pdf(file_path)
 
     else:
@@ -78,8 +101,8 @@ def index_document(
             "No text chunks were generated."
         )
 
-    # Generate embeddings
-    embeddings = embedding_model.encode(
+    # Load the model only when indexing is requested
+    embeddings = get_embedding_model().encode(
         chunks
     ).tolist()
 
@@ -91,8 +114,8 @@ def index_document(
         for i in range(len(chunks))
     ]
 
-    # Store in ChromaDB
-    collection.add(
+    # Connect to ChromaDB only when needed
+    get_collection().add(
         ids=ids,
         documents=chunks,
         embeddings=embeddings,
